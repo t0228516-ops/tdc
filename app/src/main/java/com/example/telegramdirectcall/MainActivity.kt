@@ -7,13 +7,16 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.core.widget.doAfterTextChanged
 import com.example.telegramdirectcall.databinding.ActivityMainBinding
 
 class MainActivity : AppCompatActivity() {
@@ -44,6 +47,21 @@ class MainActivity : AppCompatActivity() {
             requestCallPermission()
         }
 
+        val sp = getSharedPreferences("settings", Context.MODE_PRIVATE)
+        binding.swAuto.isChecked = sp.getBoolean("auto", false)
+        binding.swAuto.setOnCheckedChangeListener { _, c -> sp.edit().putBoolean("auto", c).apply() }
+        binding.etFilter.setText(sp.getString("filter", ""))
+        binding.etFilter.doAfterTextChanged { sp.edit().putString("filter", it?.toString().orEmpty()).apply() }
+        binding.btnNotifAccess.setOnClickListener {
+            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+        }
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+
         binding.btnCopyDump.setOnClickListener {
             val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             cm.setPrimaryClip(ClipData.newPlainText("dump", binding.tvDump.text))
@@ -57,6 +75,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateStatus() {
+        val notifOn = NotificationManagerCompat.getEnabledListenerPackages(this).contains(packageName)
+        binding.tvNotifStatus.text = if (notifOn) "Хабарлама қолжетімділігі қосулы ✓" else "Хабарлама қолжетімділігі өшірулі ✗"
+        binding.tvNotifStatus.setTextColor(if (notifOn) 0xFF2E7D32.toInt() else 0xFFC62828.toInt())
         val dumps = getSharedPreferences(CallAccessibilityService.PREFS, Context.MODE_PRIVATE)
             .getString(CallAccessibilityService.KEY_DUMPS, "") ?: ""
         binding.tvDump.text = if (dumps.isBlank()) "Әзірге бос" else dumps
