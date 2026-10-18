@@ -33,6 +33,24 @@ object Caller {
         return best
     }
 
+    /** Мәтіндегі барлық нөмірлер (орналасқан индекс аралығымен). */
+    fun findNumbers(text: String): List<Pair<IntRange, String>> {
+        val all = ArrayList<Pair<IntRange, String>>()
+        for (re in listOf(KZ_FULL, KZ_SHORT, INTL)) {
+            for (m in re.findAll(text)) {
+                val n = normalize(m.value) ?: continue
+                all.add(Pair(m.range, n))
+            }
+        }
+        all.sortBy { it.first.first }
+        val out = ArrayList<Pair<IntRange, String>>()
+        for (p in all) {
+            if (out.isNotEmpty() && p.first.first <= out.last().first.last) continue
+            out.add(p)
+        }
+        return out
+    }
+
     /** Мәтіндегі соңғы нөмір (хабарламаның соңындағы нөмірді алу үшін). */
     fun extractLastNumber(text: String): String? {
         var bestPos = -1

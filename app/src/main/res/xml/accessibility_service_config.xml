@@ -6,5 +6,6 @@
     android:notificationTimeout="0"
     android:canRetrieveWindowContent="true"
     android:isAccessibilityTool="true"
+    android:canTakeScreenshot="true"
     android:settingsActivity="com.example.telegramdirectcall.MainActivity"
     android:accessibilityFlags="flagIncludeNotImportantViews|flagRetrieveInteractiveWindows" />

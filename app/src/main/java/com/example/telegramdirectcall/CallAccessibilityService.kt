@@ -2,10 +2,14 @@ package com.example.telegramdirectcall
 
 import android.accessibilityservice.AccessibilityService
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.PixelFormat
 import android.graphics.Rect
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
+import android.view.Display
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
@@ -14,6 +18,11 @@ import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.Toast
+import androidx.core.content.ContextCompat
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.Text
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 
 /**
  * 1) Чаттағы телефон нөмірлерінің үстіне көрінбейтін қабат қояды: басқанда бірден қоңырау шалынады.
@@ -62,13 +71,32 @@ class CallAccessibilityService : AccessibilityService() {
     private var lastDump = ""
     private var lastEventSource: AccessibilityNodeInfo? = null
 
+    private var fgPkg: String? = null
+    private var ocrBusy = false
+    private var lastCaptureAt = 0L
+    private var scrollGen = 0
+    private var guardRunning = false
+    private val recognizer by lazy { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
+
     private val refreshRunnable = Runnable { refreshOverlays() }
     private val guardRunnable = object : Runnable {
         override fun run() {
-            if (overlays.isNotEmpty()) {
-                if (!telegramInForeground()) clearOverlays()
-                handler.postDelayed(this, 1000)
+            if (!isTelegramFg()) {
+                guardRunning = false
+                clearOverlays()
+                return
             }
+            scheduleRefresh(0)
+            handler.postDelayed(this, 2500)
+        }
+    }
+
+    private fun isTelegramFg(): Boolean = fgPkg != null && fgPkg in TELEGRAM_PACKAGES
+
+    private fun ensureGuard() {
+        if (!guardRunning) {
+            guardRunning = true
+            handler.postDelayed(guardRunnable, 2500)
         }
     }
 
@@ -82,6 +110,13 @@ class CallAccessibilityService : AccessibilityService() {
         if (event == null) return
         val pkg = event.packageName?.toString()
         val type = event.eventType
+
+        if (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && pkg != null &&
+            pkg != "com.android.systemui" && pkg != packageName && pkg != "android" &&
+            !pkg.contains("inputmethod") && !pkg.contains("keyboard")
+        ) {
+            fgPkg = pkg
+        }
 
         if (pkg != null && pkg in DIALER_PACKAGES) {
             if (System.currentTimeMillis() < pendingDialUntil) tryDialer()
@@ -106,7 +141,10 @@ class CallAccessibilityService : AccessibilityService() {
         } catch (_: Exception) {
         }
 
+        ensureGuard()
+
         if (type == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
+            scrollGen++
             clearOverlays()
             scheduleRefresh(250)
             return
@@ -140,8 +178,6 @@ class CallAccessibilityService : AccessibilityService() {
         handler.removeCallbacks(refreshRunnable)
         handler.postDelayed(refreshRunnable, delayMs)
     }
-
-    private fun telegramInForeground(): Boolean = findTelegramRoot() != null
 
     /** Telegram терезесінің түбірін windows тізімінен іздейді (rootInActiveWindow null болуы мүмкін). */
     private fun findTelegramRoot(): AccessibilityNodeInfo? {
@@ -187,13 +223,12 @@ class CallAccessibilityService : AccessibilityService() {
     private fun refreshOverlaysInner() {
         val root = findTelegramRoot()
         if (root == null) {
-            val info = try {
-                windows?.joinToString(",") { "${it.type}:${it.root?.packageName?.toString()?.substringAfterLast('.')}" } ?: "null"
-            } catch (_: Exception) {
-                "err"
+            // Telegram терезесі Accessibility-ге көрінбейді → экран суреті + OCR
+            if (isTelegramFg()) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) captureAndOcr()
+            } else {
+                clearOverlays()
             }
-            saveDump("REFRESH: no telegram window; windows=$info; eventSrc=${lastEventSource != null}")
-            clearOverlays()
             return
         }
         val screenW = resources.displayMetrics.widthPixels
@@ -237,14 +272,117 @@ class CallAccessibilityService : AccessibilityService() {
 
         saveDump("REFRESH nodes=$count exact=$exact msg=$msg; " + samples.joinToString(" || "))
 
-        val keys = found.map { "${it.first.flattenToString()}|${it.second}" }
+        applyOverlays(found)
+    }
+
+    private fun applyOverlays(found: List<Pair<Rect, String>>) {
+        val keys = found.map {
+            val r = it.first
+            "${r.left / 12},${r.top / 12},${r.right / 12},${r.bottom / 12}|${it.second}"
+        }
         if (keys == overlayKeys && overlays.isNotEmpty()) return
         clearOverlays()
         if (found.isEmpty()) return
         found.take(12).forEach { addOverlay(it.first, it.second) }
         overlayKeys = keys
-        handler.removeCallbacks(guardRunnable)
-        handler.postDelayed(guardRunnable, 1000)
+    }
+
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.R)
+    private fun captureAndOcr() {
+        if (ocrBusy) return
+        val now = SystemClock.elapsedRealtime()
+        val wait = 800 - (now - lastCaptureAt)
+        if (wait > 0) {
+            scheduleRefresh(wait)
+            return
+        }
+        ocrBusy = true
+        lastCaptureAt = now
+        val gen = scrollGen
+        takeScreenshot(
+            Display.DEFAULT_DISPLAY,
+            ContextCompat.getMainExecutor(this),
+            object : AccessibilityService.TakeScreenshotCallback {
+                override fun onSuccess(result: AccessibilityService.ScreenshotResult) {
+                    try {
+                        val hw = Bitmap.wrapHardwareBuffer(result.hardwareBuffer, result.colorSpace)
+                        val bmp = hw?.copy(Bitmap.Config.ARGB_8888, false)
+                        hw?.recycle()
+                        result.hardwareBuffer.close()
+                        if (bmp == null) {
+                            ocrBusy = false
+                            return
+                        }
+                        recognizer.process(InputImage.fromBitmap(bmp, 0))
+                            .addOnSuccessListener { t ->
+                                ocrBusy = false
+                                bmp.recycle()
+                                onOcr(t, gen)
+                            }
+                            .addOnFailureListener { e ->
+                                ocrBusy = false
+                                bmp.recycle()
+                                saveDump("OCR fail: ${e.message}")
+                            }
+                    } catch (e: Exception) {
+                        ocrBusy = false
+                        saveDump("OCR err: ${e.javaClass.simpleName} ${e.message}")
+                    }
+                }
+
+                override fun onFailure(errorCode: Int) {
+                    ocrBusy = false
+                    saveDump("SCREENSHOT fail code=$errorCode")
+                }
+            }
+        )
+    }
+
+    private fun onOcr(text: Text, gen: Int) {
+        if (gen != scrollGen || !isTelegramFg()) {
+            scheduleRefresh(300)
+            return
+        }
+        val found = ArrayList<Pair<Rect, String>>()
+        var lines = 0
+        for (block in text.textBlocks) {
+            for (line in block.lines) {
+                lines++
+                val sb = StringBuilder()
+                val spans = ArrayList<Triple<Int, Int, Rect>>()
+                for (el in line.elements) {
+                    val box = el.boundingBox ?: continue
+                    if (sb.isNotEmpty()) sb.append(' ')
+                    val st = sb.length
+                    sb.append(el.text)
+                    spans.add(Triple(st, sb.length, box))
+                }
+                val lineText = sb.toString()
+                if (lineText.count { it.isDigit() } < 9) continue
+                for ((range, number) in Caller.findNumbers(lineText)) {
+                    val u = Rect()
+                    var first = true
+                    for ((st, en, box) in spans) {
+                        if (en > range.first && st <= range.last) {
+                            if (first) {
+                                u.set(box)
+                                first = false
+                            } else {
+                                u.union(box)
+                            }
+                        }
+                    }
+                    if (first) continue
+                    u.inset(-10, -18)
+                    if (u.left < 0) u.left = 0
+                    if (u.top < 0) u.top = 0
+                    if (u.width() > 20 && u.height() > 20) found.add(Pair(u, number))
+                }
+            }
+        }
+        saveDump("OCR lines=$lines numbers=${found.size} " +
+            found.take(4).joinToString(" | ") { "${it.second}@${it.first.flattenToShortString()}" })
+        applyOverlays(found)
     }
 
     private fun addOverlay(rect: Rect, number: String) {
@@ -291,7 +429,6 @@ class CallAccessibilityService : AccessibilityService() {
     }
 
     private fun clearOverlays() {
-        handler.removeCallbacks(guardRunnable)
         for (v in overlays) {
             try {
                 wm.removeView(v)
