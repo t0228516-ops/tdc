@@ -136,43 +136,70 @@ class CallAccessibilityService : AccessibilityService() {
     }
 
     private fun refreshOverlays() {
+        try {
+            refreshOverlaysInner()
+        } catch (e: Exception) {
+            saveDump("ERR: ${e.javaClass.simpleName} ${e.message}")
+        }
+    }
+
+    private fun refreshOverlaysInner() {
         val root = rootInActiveWindow
-        if (root == null || root.packageName?.toString() !in TELEGRAM_PACKAGES) {
+        if (root == null) {
+            saveDump("REFRESH: root=null")
             clearOverlays()
             return
         }
+        if (root.packageName?.toString() !in TELEGRAM_PACKAGES) {
+            clearOverlays()
+            return
+        }
+        val screenW = resources.displayMetrics.widthPixels
         val found = ArrayList<Pair<Rect, String>>()
-        val digitNodes = ArrayList<String>()
+        val samples = ArrayList<String>()
         var count = 0
+        var exact = 0
+        var msg = 0
         val stack = ArrayDeque<AccessibilityNodeInfo>()
         stack.addLast(root)
         val rect = Rect()
         while (stack.isNotEmpty() && count < 900) {
             val n = stack.removeLast()
             count++
-            val t = (n.text ?: n.contentDescription)?.toString()?.replace(' ', ' ')?.trim()
-            if (t != null && t.count { it.isDigit() } >= 7) {
+            val t = (n.text ?: n.contentDescription)?.toString()?.replace('\u00A0', ' ')?.trim()
+            if (t != null && t.count { it.isDigit() } >= 9) {
                 n.getBoundsInScreen(rect)
-                if (digitNodes.size < 6) {
-                    digitNodes.add("${n.className?.toString()?.substringAfterLast('.')} '${t.take(30)}' $rect")
+                if (samples.size < 5) {
+                    samples.add("${n.className?.toString()?.substringAfterLast('.')} ch=${n.childCount} act=${n.actionList.size} '${t.take(45)}' $rect")
                 }
-                if (t.length <= 24 && NUMBER_ONLY.matches(t) && n.isVisibleToUser &&
-                    rect.width() > 10 && rect.height() in 10..220
-                ) {
-                    val num = Caller.extractNumber(t)
-                    if (num != null) found.add(Pair(Rect(rect), num))
+                val visible = n.isVisibleToUser && rect.width() > 10 && rect.height() > 10
+                if (visible) {
+                    if (t.length <= 24 && NUMBER_ONLY.matches(t) && rect.height() <= 220) {
+                        // толық нөмір элементі — дәл орны
+                        Caller.extractNumber(t)?.let { found.add(Pair(Rect(rect), it)); exact++ }
+                    } else if (rect.height() >= 60 && rect.top > 150) {
+                        // нөмірі бар хабарлама — төменгі бөлігіне қабат қоямыз
+                        Caller.extractLastNumber(t)?.let { num ->
+                            val r = Rect(rect)
+                            r.top = r.top + (r.height() * 0.45).toInt()
+                            if (r.left < screenW / 10) r.left = screenW / 8
+                            if (r.width() > 10 && r.height() > 10) {
+                                found.add(Pair(r, num)); msg++
+                            }
+                        }
+                    }
                 }
             }
             for (i in 0 until n.childCount) n.getChild(i)?.let { stack.addLast(it) }
         }
 
-        saveDump("NUMBER-NODES=${found.size}; " + digitNodes.joinToString(" || "))
+        saveDump("REFRESH nodes=$count exact=$exact msg=$msg; " + samples.joinToString(" || "))
 
         val keys = found.map { "${it.first.flattenToString()}|${it.second}" }
         if (keys == overlayKeys && overlays.isNotEmpty()) return
         clearOverlays()
         if (found.isEmpty()) return
-        found.take(10).forEach { addOverlay(it.first, it.second) }
+        found.take(12).forEach { addOverlay(it.first, it.second) }
         overlayKeys = keys
         handler.removeCallbacks(guardRunnable)
         handler.postDelayed(guardRunnable, 1000)
@@ -181,7 +208,7 @@ class CallAccessibilityService : AccessibilityService() {
     private fun addOverlay(rect: Rect, number: String) {
         try {
             val v = View(this)
-            v.setBackgroundColor(0x1A0088CC) // өте ақшыл көк: белсенді екенін көрсетеді
+            v.setBackgroundColor(0x330088CC) // өте ақшыл көк: белсенді екенін көрсетеді
             var downX = 0f
             var downY = 0f
             v.setOnTouchListener { view, ev ->

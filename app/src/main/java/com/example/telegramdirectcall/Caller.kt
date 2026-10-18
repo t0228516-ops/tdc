@@ -33,6 +33,22 @@ object Caller {
         return best
     }
 
+    /** Мәтіндегі соңғы нөмір (хабарламаның соңындағы нөмірді алу үшін). */
+    fun extractLastNumber(text: String): String? {
+        var bestPos = -1
+        var best: String? = null
+        for (re in listOf(KZ_FULL, KZ_SHORT, INTL)) {
+            for (m in re.findAll(text)) {
+                val num = normalize(m.value) ?: continue
+                if (m.range.first > bestPos) {
+                    bestPos = m.range.first
+                    best = num
+                }
+            }
+        }
+        return best
+    }
+
     fun normalize(raw: String): String? {
         val s = raw.trim()
         val plus = s.startsWith("+")
