@@ -3,8 +3,8 @@
     android:description="@string/accessibility_service_description"
     android:accessibilityEventTypes="typeWindowContentChanged|typeWindowStateChanged|typeWindowsChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
-    android:notificationTimeout="50"
+    android:notificationTimeout="0"
     android:canRetrieveWindowContent="true"
     android:settingsActivity="com.example.telegramdirectcall.MainActivity"
     android:accessibilityFlags="flagIncludeNotImportantViews|flagRetrieveInteractiveWindows"
-    android:packageNames="org.telegram.messenger,org.telegram.messenger.web,org.telegram.messenger.beta,org.telegram.plus" />
+    android:packageNames="org.telegram.messenger,org.telegram.messenger.web,org.telegram.messenger.beta,org.telegram.plus,com.google.android.dialer,com.android.dialer,com.android.contacts,com.samsung.android.dialer,com.samsung.android.contacts,com.oplus.dialer,com.coloros.dialer,com.miui.dialer" />

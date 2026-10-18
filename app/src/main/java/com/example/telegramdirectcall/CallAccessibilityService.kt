@@ -18,7 +18,7 @@ class CallAccessibilityService : AccessibilityService() {
         const val PREFS = "dump_prefs"
         const val KEY_DUMPS = "dumps"
         private const val MAX_POPUP_NODES = 40
-        private const val DEBOUNCE_MS = 2000L
+        private const val DEBOUNCE_MS = 1200L
 
         private val TELEGRAM_PACKAGES = setOf(
             "org.telegram.messenger",
@@ -26,6 +26,21 @@ class CallAccessibilityService : AccessibilityService() {
             "org.telegram.messenger.beta",
             "org.telegram.plus"
         )
+
+        private val DIALER_PACKAGES = setOf(
+            "com.google.android.dialer",
+            "com.android.dialer",
+            "com.android.contacts",
+            "com.samsung.android.dialer",
+            "com.samsung.android.contacts",
+            "com.oplus.dialer",
+            "com.coloros.dialer",
+            "com.miui.dialer"
+        )
+        private const val PENDING_MS = 8000L
+
+        // Диалердегі «Позвонить» түймесі
+        private val DIAL_BUTTON_LABELS = listOf("позвонить", "вызов", "call", "dial", "набрать", "қоңырау")
 
         // «Позвонить по телефону» пункті (ru / en / kk)
         private val CALL_LABELS = listOf(
@@ -39,6 +54,7 @@ class CallAccessibilityService : AccessibilityService() {
     }
 
     private var lastClickTime = 0L
+    private var pendingDialUntil = 0L
     private var lastDump = ""
 
     override fun onServiceConnected() {
@@ -49,6 +65,14 @@ class CallAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
         val pkg = event.packageName?.toString()
+
+        // Диалер ашылса және соңғы 8 с ішінде Telegram-да «Позвонить» басылса — диалердегі түймені басамыз
+        if (pkg != null && pkg in DIALER_PACKAGES) {
+            if (System.currentTimeMillis() < pendingDialUntil) {
+                tryDialer()
+            }
+            return
+        }
         if (pkg != null && pkg !in TELEGRAM_PACKAGES) return
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
@@ -92,7 +116,57 @@ class CallAccessibilityService : AccessibilityService() {
         if (now - lastClickTime < DEBOUNCE_MS) return true
         lastClickTime = now
 
-        return clickNodeOrParent(target)
+        val ok = clickNodeOrParent(target)
+        if (ok) pendingDialUntil = now + PENDING_MS
+        return ok
+    }
+
+    private fun tryDialer() {
+        val root = rootInActiveWindow
+        if (root != null && root.packageName?.toString() in DIALER_PACKAGES) {
+            handleDialer(root)
+            return
+        }
+        try {
+            windows?.forEach { w ->
+                val r = w.root ?: return@forEach
+                if (r.packageName?.toString() in DIALER_PACKAGES) {
+                    handleDialer(r)
+                    return
+                }
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    /** Диалердің нөмір терілген экранында төменгі «Позвонить» түймесін басады. */
+    private fun handleDialer(root: AccessibilityNodeInfo) {
+        if (root.packageName?.toString() !in DIALER_PACKAGES) return
+        val nodes = ArrayList<AccessibilityNodeInfo>()
+        collect(root, nodes, 250)
+
+        // экранда терілген нөмір бар болуы керек (кемінде 7 цифр)
+        val hasNumber = nodes.any { n ->
+            val t = n.text?.toString() ?: return@any false
+            t.count { it.isDigit() } >= 7 && t.length <= 25
+        }
+        if (!hasNumber) return
+
+        // «Позвонить» түймелерінің ішінен ең төменгісін аламыз (терілген нөмірдің үлкен түймесі)
+        val rect = android.graphics.Rect()
+        var best: AccessibilityNodeInfo? = null
+        var bestTop = -1
+        for (n in nodes) {
+            val t = (n.text ?: n.contentDescription)?.toString()?.trim()?.lowercase() ?: continue
+            if (t.length > 20 || DIAL_BUTTON_LABELS.none { t.startsWith(it) }) continue
+            n.getBoundsInScreen(rect)
+            if (rect.top > bestTop) {
+                bestTop = rect.top
+                best = n
+            }
+        }
+        val target = best ?: return
+        if (clickNodeOrParent(target)) pendingDialUntil = 0L
     }
 
     private fun clickNodeOrParent(node: AccessibilityNodeInfo): Boolean {
