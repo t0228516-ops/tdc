@@ -21,7 +21,9 @@
     <string name="call_permission_denied">Қоңырау рұқсаты жоқ ✗</string>
     
     <string name="how_to_use">Қалай қолдану керек</string>
-    <string name="how_to_use_text">1. Telegram-ды ашыңыз\n2. Телефон нөмірі бар хабарламаны табыңыз\n3. Нөмірді бір рет басыңыз (Telegram мәзірі бір сәтке шығып, жабылады)\n4. Қоңырау бірден басталады</string>
+    <string name="how_to_use_text">1. Telegram-да нөмірді басыңыз
+2. Бірінші рет Android «Қандай қолданбамен ашу?» деп сұрайды: «Telegram Direct Call» таңдап, «Әрқашан» (Всегда) басыңыз
+3. Келесіде нөмірді бір басқанда қоңырау бірден басталады</string>
     
     <string name="warning">Ескерту: Telegram интерфейсінің ерекшеліктеріне байланысты барлық нөмірлерде жұмыс істемеуі мүмкін. Бұл best-effort шешім.</string>
     

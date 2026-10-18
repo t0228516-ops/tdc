@@ -26,6 +26,19 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".DialInterceptActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:label="Telegram Direct Call"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.DIAL" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="tel" />
+            </intent-filter>
+        </activity>
+
         <service
             android:name=".CallAccessibilityService"
             android:exported="true"
