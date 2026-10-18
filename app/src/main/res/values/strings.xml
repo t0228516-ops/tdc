@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Telegram Direct Call</string>
+    <string name="accessibility_service_description">Telegram-дағы телефон нөмірін басқанда бірден қоңырау бастау үшін қажет. Қолданба тек сіз басқан нөмірге қоңырау шалады.</string>
+    
+    <string name="title">Telegram Direct Call</string>
+    <string name="description">Telegram чатындағы телефон нөмірін басқанда диалерді ашпай, бірден қоңырау бастайды.</string>
+    
+    <string name="step1_title">1. Қолжетімділік қызметін қосыңыз</string>
+    <string name="step1_desc">Төмендегі батырманы басып, «Telegram Direct Call» қызметін қосыңыз.</string>
+    <string name="open_accessibility">Қолжетімділік параметрлерін ашу</string>
+    
+    <string name="step2_title">2. Қоңырау рұқсатын беріңіз</string>
+    <string name="step2_desc">Қоңырау шалу үшін рұқсат қажет.</string>
+    <string name="grant_call_permission">Қоңырау рұқсатын беру</string>
+    
+    <string name="status_title">Қызмет күйі</string>
+    <string name="status_enabled">Қолжетімділік қызметі қосулы ✓</string>
+    <string name="status_disabled">Қолжетімділік қызметі өшірулі ✗</string>
+    <string name="call_permission_granted">Қоңырау рұқсаты бар ✓</string>
+    <string name="call_permission_denied">Қоңырау рұқсаты жоқ ✗</string>
+    
+    <string name="how_to_use">Қалай қолдану керек</string>
+    <string name="how_to_use_text">1. Telegram-ды ашыңыз\n2. Телефон нөмірі бар хабарламаны табыңыз\n3. Нөмірді бір рет басыңыз (Telegram мәзірі бір сәтке шығып, жабылады)\n4. Қоңырау бірден басталады</string>
+    
+    <string name="warning">Ескерту: Telegram интерфейсінің ерекшеліктеріне байланысты барлық нөмірлерде жұмыс істемеуі мүмкін. Бұл best-effort шешім.</string>
+    
+    <string name="permission_needed">Рұқсат қажет</string>
+    <string name="call_permission_rationale">Қоңырау шалу үшін рұқсат беріңіз.</string>
+</resources>
