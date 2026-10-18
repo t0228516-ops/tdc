@@ -126,8 +126,13 @@ class CallAccessibilityService : AccessibilityService() {
         val isTelegram = (pkg != null && pkg in TELEGRAM_PACKAGES) ||
             (pkg == null && type == AccessibilityEvent.TYPE_WINDOWS_CHANGED)
         if (!isTelegram) {
-            // басқа қолданбаға өтсек — қабаттарды алып тастаймыз
-            if (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && overlays.isNotEmpty()) clearOverlays()
+            // басқа ШЫН қолданбаға өтсек — қабаттарды алып тастаймыз
+            // (өз қабатымыздың, systemui мен пернетақтаның оқиғалары есепке алынбайды)
+            val realOtherApp = pkg != null && pkg != packageName && pkg != "com.android.systemui" &&
+                pkg != "android" && !pkg.contains("inputmethod") && !pkg.contains("keyboard")
+            if (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && realOtherApp && overlays.isNotEmpty()) {
+                clearOverlays()
+            }
             return
         }
 
@@ -285,6 +290,7 @@ class CallAccessibilityService : AccessibilityService() {
         if (found.isEmpty()) return
         found.take(12).forEach { addOverlay(it.first, it.second) }
         overlayKeys = keys
+        saveDump("OVERLAYS added=${overlays.size} of ${found.size}")
     }
 
     @androidx.annotation.RequiresApi(Build.VERSION_CODES.R)
@@ -424,7 +430,8 @@ class CallAccessibilityService : AccessibilityService() {
             lp.y = rect.top
             wm.addView(v, lp)
             overlays.add(v)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            saveDump("OVERLAY ERR: ${e.javaClass.simpleName} ${e.message}")
         }
     }
 
