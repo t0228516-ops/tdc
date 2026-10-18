@@ -2,12 +2,12 @@
 <resources>
     <string name="app_name">Telegram Direct Call</string>
     <string name="title">Telegram Direct Call</string>
-    <string name="accessibility_service_description">Telegram-нан диалер ашылғанда, нөмір терілген болса, «Қоңырау» түймесін өзі басады. Басқа ештеңе істемейді.</string>
+    <string name="accessibility_service_description">Диалер ашылып, нөмір терілген болса, «Позвонить» түймесін өзі басады. Басқа ештеңе істемейді.</string>
     <string name="how_to_use_text">1. Төмендегі батырмамен «Telegram Direct Call» қызметін қосыңыз.
 2. Telegram-да нөмірді басып, «Позвонить по телефону» таңдаңыз.
 3. Диалер ашылады — қоңырау өзі басталады.
 
-Қолмен нөмір тергенде ештеңе басылмайды.</string>
+Диалер жаңа ашылған сәттен кейін ғана басады.</string>
     <string name="open_accessibility">Қолжетімділік параметрлерін ашу</string>
     <string name="diag_title">Диагностика (қоңырау түймесі табылмаса)</string>
     <string name="copy">Көшіру</string>

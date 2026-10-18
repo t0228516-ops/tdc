@@ -7,4 +7,4 @@
     android:canRetrieveWindowContent="true"
     android:isAccessibilityTool="true"
     android:settingsActivity="com.example.telegramdirectcall.MainActivity"
-    android:accessibilityFlags="flagIncludeNotImportantViews|flagReportViewIds" />
+    android:accessibilityFlags="flagIncludeNotImportantViews|flagReportViewIds|flagRetrieveInteractiveWindows" />
