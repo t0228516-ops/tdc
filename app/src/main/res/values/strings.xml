@@ -2,12 +2,12 @@
 <resources>
     <string name="app_name">Telegram Direct Call</string>
     <string name="title">Telegram Direct Call</string>
-    <string name="accessibility_service_description">Диалер ашылып, нөмір терілген болса, «Позвонить» түймесін, содан кейін SIM таңдау терезесін өзі басады.</string>
+    <string name="accessibility_service_description">Диалер ашылып, нөмір терілген болса, «Позвонить» түймесін, содан кейін SIM таңдау терезесінде «activ»-ті өзі басады.</string>
     <string name="how_to_use_text">1. Төмендегі батырмамен «Telegram Direct Call» қызметін қосыңыз.
 2. Telegram-да нөмірді басып, «Позвонить по телефону» таңдаңыз.
 3. Диалер ашылады — қоңырау өзі басталады.
 
-SIM таңдау терезесі шықса, белсенді SIM-ді де басады.</string>
+SIM таңдау терезесі шықса, «activ» SIM-ін басады.</string>
     <string name="open_accessibility">Қолжетімділік параметрлерін ашу</string>
     <string name="diag_title">Диагностика (қоңырау түймесі табылмаса)</string>
     <string name="copy">Көшіру</string>

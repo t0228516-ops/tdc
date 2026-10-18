@@ -31,6 +31,8 @@ class CallAccessibilityService : AccessibilityService() {
             "истори", "журнал", "недавн", "вызовы", "history", "recent", "calls", "log",
             "контакт", "contact", "pad", "клавиатур", "keypad", "заверш", "end"
         )
+        // Қай SIM-ді басу керек: оператор атауында осы сөз бар опция (кіші әріппен)
+        private const val SIM_PREFER = "activ"
         private val SIM_TITLES = listOf(
             "выбор sim", "выбор сим", "select sim", "choose sim", "call with",
             "позвонить с помощью", "sim картасын", "sim таңдау"
@@ -95,6 +97,19 @@ class CallAccessibilityService : AccessibilityService() {
             }
             if (!isSimDialog) continue
 
+            // 1) Таңдаулы SIM («activ») — атауы бойынша
+            nodes.firstOrNull { n ->
+                (n.text ?: n.contentDescription)?.toString()?.lowercase()?.contains(SIM_PREFER) == true
+            }?.let { pref ->
+                var cur: AccessibilityNodeInfo? = pref
+                var d = 0
+                while (cur != null && d++ < 5) {
+                    if (cur.isClickable && cur.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+                    cur = cur.parent
+                }
+            }
+
+            // 2) Табылмаса — таңдалған/бірінші SIM
             val r = Rect()
             val options = nodes.filter { n ->
                 n.isClickable && n.isEnabled && SIM_SKIP.none { labelOf(n).contains(it) }
