@@ -11,8 +11,8 @@ android {
         applicationId = "com.example.telegramdirectcall"
         minSdk = 26
         targetSdk = 35
-        versionCode = 19
-        versionName = "19"
+        versionCode = 20
+        versionName = "20"
     }
 
     buildTypes {
@@ -43,4 +43,6 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
+    implementation("androidx.constraintlayout:constraintlayout:2.2.0")
+    implementation("com.google.mlkit:text-recognition:16.0.1")
 }
