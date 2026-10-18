@@ -75,6 +75,7 @@ class CallAccessibilityService : AccessibilityService() {
     private var ocrBusy = false
     private var lastCaptureAt = 0L
     private var scrollGen = 0
+    private var a11yNums: Set<String> = emptySet()
     private var guardRunning = false
     private val recognizer by lazy { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
 
@@ -91,7 +92,11 @@ class CallAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun isTelegramFg(): Boolean = fgPkg != null && fgPkg in TELEGRAM_PACKAGES
+    /** Telegram экранда ма: терезе көрінсе — иә, әйтпесе соңғы оқиғаға қарай. */
+    private fun isTelegramFg(): Boolean {
+        if (findTelegramRoot() != null) return true
+        return fgPkg != null && fgPkg in TELEGRAM_PACKAGES
+    }
 
     private fun ensureGuard() {
         if (!guardRunning) {
@@ -110,6 +115,12 @@ class CallAccessibilityService : AccessibilityService() {
         if (event == null) return
         val pkg = event.packageName?.toString()
         val type = event.eventType
+
+        if ((type == AccessibilityEvent.TYPE_TOUCH_INTERACTION_START ||
+                type == AccessibilityEvent.TYPE_TOUCH_INTERACTION_END) && isTelegramFg()
+        ) {
+            saveDump("EV ${evName(type)} pkg=$pkg")
+        }
 
         if (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && pkg != null &&
             pkg != "com.android.systemui" && pkg != packageName && pkg != "android" &&
@@ -130,7 +141,9 @@ class CallAccessibilityService : AccessibilityService() {
             // (өз қабатымыздың, systemui мен пернетақтаның оқиғалары есепке алынбайды)
             val realOtherApp = pkg != null && pkg != packageName && pkg != "com.android.systemui" &&
                 pkg != "android" && !pkg.contains("inputmethod") && !pkg.contains("keyboard")
-            if (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && realOtherApp && overlays.isNotEmpty()) {
+            if (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && realOtherApp &&
+                overlays.isNotEmpty() && !isTelegramFg()
+            ) {
                 clearOverlays()
             }
             return
@@ -146,7 +159,11 @@ class CallAccessibilityService : AccessibilityService() {
         } catch (_: Exception) {
         }
 
+        fgPkg = pkg ?: fgPkg
         ensureGuard()
+
+        logEvent(event)
+        if (type == AccessibilityEvent.TYPE_VIEW_CLICKED && handleTap(event)) return
 
         if (type == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
             scrollGen++
@@ -178,6 +195,49 @@ class CallAccessibilityService : AccessibilityService() {
     }
 
     // ───────────── Қабаттар (overlay) ─────────────
+
+    private fun evName(t: Int): String? = when (t) {
+        AccessibilityEvent.TYPE_VIEW_CLICKED -> "CLICK"
+        AccessibilityEvent.TYPE_VIEW_LONG_CLICKED -> "LONG"
+        AccessibilityEvent.TYPE_VIEW_FOCUSED -> "FOCUS"
+        AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED -> "A11YFOCUS"
+        AccessibilityEvent.TYPE_VIEW_SELECTED -> "SELECTED"
+        AccessibilityEvent.TYPE_TOUCH_INTERACTION_START -> "TOUCH_START"
+        AccessibilityEvent.TYPE_TOUCH_INTERACTION_END -> "TOUCH_END"
+        AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> "WSTATE"
+        else -> null
+    }
+
+    private fun eventText(event: AccessibilityEvent): String {
+        val sb = StringBuilder()
+        event.text?.forEach { sb.append(it).append(' ') }
+        try {
+            event.source?.let { src ->
+                src.text?.let { sb.append(it).append(' ') }
+                src.contentDescription?.let { sb.append(it) }
+            }
+        } catch (_: Exception) {
+        }
+        return sb.toString()
+    }
+
+    private fun logEvent(event: AccessibilityEvent) {
+        val name = evName(event.eventType) ?: return
+        val txt = eventText(event).replace('\n', ' ').take(60)
+        saveDump("EV $name cls=${event.className?.toString()?.substringAfterLast('.')} '$txt'")
+    }
+
+    /** Басу оқиғасы келсе және хабарламада бір ғана нөмір болса — бірден қоңырау. */
+    private fun handleTap(event: AccessibilityEvent): Boolean {
+        val nums = Caller.findNumbers(eventText(event)).map { it.second }.distinct()
+        if (nums.size != 1) return false
+        val now = System.currentTimeMillis()
+        if (now - lastCallTime < DEBOUNCE_MS) return true
+        lastCallTime = now
+        Toast.makeText(this, "📞 ${nums[0]}", Toast.LENGTH_SHORT).show()
+        Caller.call(this, nums[0])
+        return true
+    }
 
     private fun scheduleRefresh(delayMs: Long) {
         handler.removeCallbacks(refreshRunnable)
@@ -217,7 +277,10 @@ class CallAccessibilityService : AccessibilityService() {
         return null
     }
 
+    private val overlaysEnabled = false
+
     private fun refreshOverlays() {
+        if (!overlaysEnabled) return
         try {
             refreshOverlaysInner()
         } catch (e: Exception) {
@@ -227,13 +290,18 @@ class CallAccessibilityService : AccessibilityService() {
 
     private fun refreshOverlaysInner() {
         val root = findTelegramRoot()
-        if (root == null) {
-            // Telegram терезесі Accessibility-ге көрінбейді → экран суреті + OCR
-            if (isTelegramFg()) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) captureAndOcr()
-            } else {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // Дәл орны — экран суреті + OCR; дәл цифрлары — Accessibility мәтіні (бар болса)
+            if (!isTelegramFg()) {
                 clearOverlays()
+                return
             }
+            a11yNums = if (root != null) collectA11yNumbers(root) else emptySet()
+            captureAndOcr()
+            return
+        }
+        if (root == null) {
+            clearOverlays()
             return
         }
         val screenW = resources.displayMetrics.widthPixels
@@ -278,6 +346,41 @@ class CallAccessibilityService : AccessibilityService() {
         saveDump("REFRESH nodes=$count exact=$exact msg=$msg; " + samples.joinToString(" || "))
 
         applyOverlays(found)
+    }
+
+    private fun collectA11yNumbers(root: AccessibilityNodeInfo): Set<String> {
+        val out = HashSet<String>()
+        var count = 0
+        val stack = ArrayDeque<AccessibilityNodeInfo>()
+        stack.addLast(root)
+        while (stack.isNotEmpty() && count < 900) {
+            val n = stack.removeLast()
+            count++
+            val t = (n.text ?: n.contentDescription)?.toString()
+            if (t != null && t.count { it.isDigit() } >= 9) {
+                Caller.findNumbers(t).forEach { out.add(it.second) }
+            }
+            for (i in 0 until n.childCount) n.getChild(i)?.let { stack.addLast(it) }
+        }
+        return out
+    }
+
+    /** OCR нөмірін Accessibility-дегі дәл нөмірмен тексереді/түзетеді (≤2 цифр айырмашылық). */
+    private fun verifyNumber(ocr: String): String? {
+        if (a11yNums.isEmpty()) return ocr
+        if (ocr in a11yNums) return ocr
+        var best: String? = null
+        var bestD = 3
+        for (c in a11yNums) {
+            if (c.length != ocr.length) continue
+            var d = 0
+            for (i in c.indices) if (c[i] != ocr[i]) d++
+            if (d < bestD) {
+                bestD = d
+                best = c
+            }
+        }
+        return best
     }
 
     private fun applyOverlays(found: List<Pair<Rect, String>>) {
@@ -365,7 +468,8 @@ class CallAccessibilityService : AccessibilityService() {
                 }
                 val lineText = sb.toString()
                 if (lineText.count { it.isDigit() } < 9) continue
-                for ((range, number) in Caller.findNumbers(lineText)) {
+                for ((range, ocrNumber) in Caller.findNumbers(lineText)) {
+                    val number = verifyNumber(ocrNumber) ?: continue
                     val u = Rect()
                     var first = true
                     for ((st, en, box) in spans) {
@@ -379,7 +483,7 @@ class CallAccessibilityService : AccessibilityService() {
                         }
                     }
                     if (first) continue
-                    u.inset(-10, -18)
+                    u.inset(-12, -14)
                     if (u.left < 0) u.left = 0
                     if (u.top < 0) u.top = 0
                     if (u.width() > 20 && u.height() > 20) found.add(Pair(u, number))
@@ -408,6 +512,7 @@ class CallAccessibilityService : AccessibilityService() {
                         if (!moved && now - lastCallTime > DEBOUNCE_MS) {
                             lastCallTime = now
                             view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                            Toast.makeText(this, "📞 $number", Toast.LENGTH_SHORT).show()
                             if (!Caller.call(this, number)) {
                                 Toast.makeText(this, "Қоңырау рұқсаты жоқ", Toast.LENGTH_SHORT).show()
                             }
@@ -458,6 +563,12 @@ class CallAccessibilityService : AccessibilityService() {
         val lower = texts.map { it.trim().lowercase() }
         if (lower.none { t -> COPY_NUMBER_LABELS.any { t.startsWith(it) } }) return false
         saveDump("POPUP: " + texts.take(10).joinToString(" | ") { it.take(30) })
+
+        // Тікелей қоңырау жасалып қойса — мәзірді жабамыз, диалерге бармаймыз
+        if (System.currentTimeMillis() - lastCallTime < 5000) {
+            performGlobalAction(GLOBAL_ACTION_BACK)
+            return true
+        }
 
         val target = nodes.firstOrNull { n ->
             val t = (n.text ?: n.contentDescription)?.toString()?.trim()?.lowercase() ?: return@firstOrNull false
@@ -546,7 +657,7 @@ class CallAccessibilityService : AccessibilityService() {
         try {
             val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             val old = prefs.getString(KEY_DUMPS, "") ?: ""
-            val list = (listOf(entry) + old.split("\n").filter { it.isNotBlank() }).take(6)
+            val list = (listOf(entry) + old.split("\n").filter { it.isNotBlank() }).take(14)
             prefs.edit().putString(KEY_DUMPS, list.joinToString("\n")).apply()
         } catch (_: Exception) {
         }
