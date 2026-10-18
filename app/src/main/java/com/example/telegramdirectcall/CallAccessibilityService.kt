@@ -130,9 +130,30 @@ class CallAccessibilityService : AccessibilityService() {
         handler.postDelayed(refreshRunnable, delayMs)
     }
 
-    private fun telegramInForeground(): Boolean {
-        val r = rootInActiveWindow ?: return false
-        return r.packageName?.toString() in TELEGRAM_PACKAGES
+    private fun telegramInForeground(): Boolean = findTelegramRoot() != null
+
+    /** Telegram терезесінің түбірін windows тізімінен іздейді (rootInActiveWindow null болуы мүмкін). */
+    private fun findTelegramRoot(): AccessibilityNodeInfo? {
+        var best: AccessibilityNodeInfo? = null
+        var bestArea = 0
+        try {
+            val r = Rect()
+            windows?.forEach { w ->
+                if (w.type != android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION) return@forEach
+                val root = w.root ?: return@forEach
+                if (root.packageName?.toString() !in TELEGRAM_PACKAGES) return@forEach
+                w.getBoundsInScreen(r)
+                val area = r.width() * r.height()
+                if (area > bestArea) {
+                    bestArea = area
+                    best = root
+                }
+            }
+        } catch (_: Exception) {
+        }
+        if (best != null) return best
+        val active = rootInActiveWindow
+        return if (active != null && active.packageName?.toString() in TELEGRAM_PACKAGES) active else null
     }
 
     private fun refreshOverlays() {
@@ -144,13 +165,14 @@ class CallAccessibilityService : AccessibilityService() {
     }
 
     private fun refreshOverlaysInner() {
-        val root = rootInActiveWindow
+        val root = findTelegramRoot()
         if (root == null) {
-            saveDump("REFRESH: root=null")
-            clearOverlays()
-            return
-        }
-        if (root.packageName?.toString() !in TELEGRAM_PACKAGES) {
+            val info = try {
+                windows?.joinToString(",") { "${it.type}" } ?: "null"
+            } catch (_: Exception) {
+                "err"
+            }
+            saveDump("REFRESH: no telegram window; windows(types)=$info")
             clearOverlays()
             return
         }
