@@ -381,7 +381,7 @@ class CallAccessibilityService : AccessibilityService() {
             }
         }
         saveDump("OCR lines=$lines numbers=${found.size} " +
-            found.take(4).joinToString(" | ") { "${it.second}@${it.first.flattenToShortString()}" })
+            found.take(4).joinToString(" | ") { "${it.second}@${it.first.toShortString()}" })
         applyOverlays(found)
     }
 
