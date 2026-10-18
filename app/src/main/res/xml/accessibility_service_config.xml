@@ -1,11 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/accessibility_service_description"
-    android:accessibilityEventTypes="typeWindowContentChanged|typeWindowStateChanged|typeWindowsChanged|typeViewScrolled|typeViewClicked|typeViewLongClicked|typeViewFocused|typeViewAccessibilityFocused|typeViewSelected|typeTouchInteractionStart|typeTouchInteractionEnd"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
-    android:notificationTimeout="0"
+    android:notificationTimeout="100"
     android:canRetrieveWindowContent="true"
     android:isAccessibilityTool="true"
-    android:canTakeScreenshot="true"
     android:settingsActivity="com.example.telegramdirectcall.MainActivity"
-    android:accessibilityFlags="flagIncludeNotImportantViews|flagRetrieveInteractiveWindows" />
+    android:accessibilityFlags="flagIncludeNotImportantViews|flagReportViewIds" />
